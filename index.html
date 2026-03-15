@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TPC Resume & Cover Letter Builder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root { --bg-color: #f5f5f7; --text-main: #1d1d1f; --text-muted: #86868b; --card-bg: #ffffff; --border: #e5e5ea; --accent: #0066cc; --theme-color: #2c3e50; --danger: #ff3b30; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; flex-direction: column; min-height: 100vh; }
+        
+        /* --- LOADER --- */
+        #pageLoader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.4s ease; }
+        #pageLoader.hidden { opacity: 0; pointer-events: none; }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- TOOLBAR --- */
+        .toolbar { background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; flex-wrap: wrap; gap: 10px; }
+        .toolbar-title { font-size: 1.25rem; font-weight: 700; } .toolbar-title span { color: var(--accent); }
+        .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .btn { padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; transition: 0.2s; display: flex; align-items: center; gap: 6px; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { background: rgba(0,0,0,0.03); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #0055aa; }
+        .btn-special { background: #34c759; color: white; }
+        .btn-special:hover { background: #2eb050; }
+        
+        #colorPickerBox { display: none; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; }
+        input[type="color"] { border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
+
+        /* --- LANDING DASHBOARD --- */
+        #landingView { padding: 40px 20px; max-width: 1000px; margin: 0 auto; width: 100%; }
+        .category-title { margin: 30px 0 15px; border-bottom: 2px solid var(--border); padding-bottom: 10px; font-size: 1.4rem;}
+        .template-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+        .template-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; cursor: pointer; text-align: center; transition: 0.2s; display: flex; flex-direction: column; justify-content: space-between; }
+        .template-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+        .tag { font-size: 0.75rem; background: rgba(0,102,204,0.1); padding: 4px 8px; border-radius: 4px; color: var(--accent); font-weight: 600; display: inline-block; margin: 2px; }
+
+        /* --- MODALS --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 1000; opacity: 0; visibility: hidden; transition: 0.3s; }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        .modal-content { background: var(--card-bg); width: 90%; max-width: 450px; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); overflow: hidden; transform: translateY(20px); transition: 0.3s; }
+        .modal-overlay.show .modal-content { transform: translateY(0); }
+        .modal-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { font-size: 1.1rem; }
+        .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+        .modal-body { padding: 20px; display: grid; gap: 15px; }
+        .input-group { display: flex; flex-direction: column; gap: 6px; }
+        .input-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+        
+        .form-control { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; outline: none; transition: 0.2s; width: 100%; font-family: inherit; background: var(--card-bg);}
+        .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,102,204,0.1); }
+        /* Style gray placeholder text natively */
+        ::placeholder { color: #a1a1aa; opacity: 1; }
+
+        /* --- EDITOR VIEW --- */
+        #editorView { display: none; flex: 1; padding: 30px 20px; overflow-y: auto; align-items: center; flex-direction: column; width: 100%; }
+        .page-wrapper { width: 794px; /* Exact A4 width in px at 96dpi (210mm) */ background: white; box-shadow: 0 10px 30px rgba(0,0,0,0.1); position: relative; overflow: hidden; margin-bottom: 20px; }
+        .page-content { padding: 20mm; min-height: 1122px; /* A4 height */ }
+        
+        [contenteditable="true"] { outline: none; border-radius: 4px; transition: 0.2s; }
+        [contenteditable="true"]:hover { box-shadow: 0 0 0 2px rgba(0,102,204,0.2); background: rgba(0,102,204,0.02); }
+        
+        /* --- SMART PLACEHOLDERS --- */
+        .ph { background: rgba(0,102,204,0.1); color: var(--accent); padding: 2px 6px; border-radius: 4px; cursor: pointer; border: 1px dashed var(--accent); transition: 0.2s; white-space: pre-wrap; display: inline-block;}
+        .ph:hover { background: rgba(0,102,204,0.2); transform: scale(1.02); }
+        .ph-error { background: rgba(255,59,48,0.1) !important; color: var(--danger) !important; border-color: var(--danger) !important; animation: shake 0.4s; }
+        @keyframes shake { 0% {transform: translateX(0);} 25% {transform: translateX(-5px);} 50% {transform: translateX(5px);} 75% {transform: translateX(-5px);} 100% {transform: translateX(0);} }
+        .fill-error { background: rgba(255,59,48,0.1); color: var(--danger); border: 1px dashed var(--danger); padding: 2px 4px; border-radius: 4px; }
+
+        /* --- REMOVABLE SECTIONS --- */
+        .resume-section { position: relative; transition: background 0.2s; border-radius: 8px; }
+        .resume-section:hover { background: rgba(0,0,0,0.02); }
+        .delete-btn { position: absolute; right: -15px; top: -5px; width: 24px; height: 24px; border-radius: 50%; background: var(--danger); color: white; border: none; font-weight: bold; font-size: 14px; display: flex; justify-content: center; align-items: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: all 0.2s; box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4); z-index: 10; }
+        .resume-section:hover .delete-btn { opacity: 1; transform: scale(1); }
+        .delete-btn:hover { background: #d32f2f; transform: scale(1.1) !important; }
+        .exporting .delete-btn, .exporting .resume-section:hover { display: none !important; background: transparent !important; }
+
+        .photo-box { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px dashed #ccc; margin: 0 auto 20px; display: block; }
+        
+        /* ================= LAYOUT STYLES ================= */
+        .layout-classic { font-family: "Times New Roman", serif; color: #000; }
+        .layout-classic h1 { font-size: 26pt; text-align: center; text-transform: uppercase; margin-bottom: 5px; }
+        .layout-classic .contact { text-align: center; font-size: 11pt; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+        .layout-classic h2 { font-size: 13pt; text-transform: uppercase; border-bottom: 1px solid #ccc; margin-top: 15px; margin-bottom: 10px; }
+        .layout-classic .row { display: flex; justify-content: space-between; font-weight: bold; font-size: 11pt; }
+        .layout-classic .sub-row { display: flex; justify-content: space-between; font-style: italic; font-size: 10.5pt; margin-bottom: 5px; }
+        .layout-classic ul { margin-left: 20px; font-size: 10.5pt; line-height: 1.5; }
+        
+        .layout-colored { display: flex; min-height: 1122px; font-family: "Segoe UI", sans-serif; padding: 0; }
+        .layout-colored .sidebar { width: 35%; background: var(--theme-color); color: white; padding: 15mm; }
+        .layout-colored .main-col { width: 65%; padding: 15mm; }
+        .layout-colored h1 { font-size: 28pt; color: var(--theme-color); line-height: 1.1; margin-bottom: 5px; }
+        .layout-colored h2 { font-size: 14pt; color: var(--theme-color); border-bottom: 2px solid #eee; margin: 20px 0 10px; padding-bottom: 4px; }
+        .layout-colored .sidebar h2 { color: white; border-color: rgba(255,255,255,0.2); font-size: 13pt; margin-top: 20px; }
+        .layout-colored .contact-item { margin-bottom: 12px; font-size: 10pt; }
+        .layout-colored .contact-item strong { display: block; color: rgba(255,255,255,0.7); font-size: 8pt; text-transform: uppercase; }
+        .layout-colored .row { display: flex; justify-content: space-between; font-weight: 600; font-size: 11pt; }
+        .layout-colored .sub-row { display: flex; justify-content: space-between; font-size: 10pt; color: #555; margin-bottom: 5px; }
+        .layout-colored ul { margin-left: 15px; font-size: 10pt; line-height: 1.5; }
+        .layout-colored .photo-box { border-color: rgba(255,255,255,0.5); }
+
+        .layout-minimal { font-family: -apple-system, Roboto, Helvetica, Arial, sans-serif; color: #111; }
+        .layout-minimal h1 { font-size: 28pt; font-weight: 300; letter-spacing: 1px; margin-bottom: 5px; border-bottom: 1px solid #000; padding-bottom: 10px; }
+        .layout-minimal .contact { font-size: 10pt; margin-top: 10px; margin-bottom: 25px; color: #555; }
+        .layout-minimal h2 { font-size: 12pt; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 20px; margin-bottom: 10px; color: #000; }
+        .layout-minimal .row { display: flex; justify-content: space-between; font-weight: 600; font-size: 11pt; }
+        .layout-minimal .sub-row { display: flex; justify-content: space-between; font-size: 10pt; color: #444; margin-bottom: 5px; }
+        .layout-minimal ul { margin-left: 15px; font-size: 10pt; line-height: 1.6; }
+
+        .cover-letter { font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.6; }
+        .html2pdf__page-break { page-break-before: always; height: 0; border: none; margin: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="pageLoader"><div class="spinner"></div><div style="font-weight: 600; color: var(--text-muted);">Loading Workspace...</div></div>
+
+    <datalist id="email-domains">
+        <option value="student@dihm.edu.in">
+        <option value="@gmail.com">
+        <option value="@yahoo.com">
+    </datalist>
+
+    <div id="quickFillModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚡ Quick Fill Personal Info</h3>
+                <button onclick="document.getElementById('quickFillModal').classList.remove('show')" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display: flex; gap: 10px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>First Name</label>
+                        <input type="text" placeholder="Gagan" oninput="this.value = this.value.replace(/\b\w/g, l => l.toUpperCase()); updateField('fname', this.value)">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>Last Name</label>
+                        <input type="text" placeholder="Sharma" oninput="this.value = this.value.replace(/\b\w/g, l => l.toUpperCase()); updateField('lname', this.value)">
+                    </div>
+                </div>
+                <div class="input-group"><label>Email Address</label><input type="email" list="email-domains" placeholder="student@dihm.edu.in" oninput="updateField('email', this.value)"></div>
+                <div class="input-group"><label>Phone Number</label><input type="text" placeholder="+91 98765 43210" onblur="formatPhone(this)" oninput="updateField('phone', this.value)"></div>
+                <div class="input-group"><label>Location / City</label><input type="text" placeholder="New Delhi, India" oninput="updateField('location', this.value)"></div>
+                <div class="input-group"><label>LinkedIn URL (Optional)</label><input type="text" placeholder="linkedin.com/in/username" oninput="updateField('linkedin', this.value)"></div>
+            </div>
+            <div style="padding: 20px; border-top: 1px solid var(--border); background: #fafafa;">
+                <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="document.getElementById('quickFillModal').classList.remove('show')">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="smartEditModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Edit Information</h3>
+                <button onclick="document.getElementById('smartEditModal').classList.remove('show')" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body" id="smartEditBody">
+                </div>
+            <div style="padding: 20px; border-top: 1px solid var(--border); background: #fafafa; display: flex; gap:10px;">
+                <button class="btn btn-outline" style="flex:1; justify-content:center;" onclick="document.getElementById('smartEditModal').classList.remove('show')">Cancel</button>
+                <button class="btn btn-primary" style="flex:1; justify-content:center;" onclick="saveSmartEdit()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-title">TPC <span>Editor</span></div>
+        <div class="controls" id="editorControls" style="display: none;">
+            <div id="colorPickerBox">Theme: <input type="color" id="themeColor" value="#2c3e50" onchange="updateColor(event)"></div>
+            <button class="btn btn-special" onclick="document.getElementById('quickFillModal').classList.add('show')">⚡ Quick Fill</button>
+            <button class="btn btn-outline" onclick="addCustomSection()">+ Add Section</button>
+            <button class="btn btn-outline" onclick="location.reload()">Back</button>
+            <button class="btn btn-primary" onclick="exportDoc('pdf')">Export PDF</button>
+        </div>
+    </div>
+
+    <div id="landingView">
+        <div style="text-align: center;"><h1>Select a Resume Preset</h1></div>
+        
+        <h2 class="category-title">1st Year / IT Interviews (No Hotel Experience)</h2>
+        <div class="template-grid">
+            <div class="template-card" onclick="buildResume('it', 'minimal', false)">
+                <h3>Minimalist Clean</h3><div style="margin: 10px 0;"><span class="tag">No Photo</span><span class="tag">B&W</span></div>
+                <p style="font-size: 0.85rem;">Ultra-clean layout focusing purely on academics and soft skills.</p>
+            </div>
+            <div class="template-card" onclick="buildResume('it', 'classic', true)">
+                <h3>Classic Profile</h3><div style="margin: 10px 0;"><span class="tag">With Photo</span><span class="tag">Traditional</span></div>
+                <p style="font-size: 0.85rem;">The standard, hospitality-approved format with a formal headshot space.</p>
+            </div>
+            <div class="template-card" onclick="buildResume('it', 'colored', true)">
+                <h3>Modern Color</h3><div style="margin: 10px 0;"><span class="tag">Color Customizer</span></div>
+                <p style="font-size: 0.85rem;">Two-column design. Pick your own color. Great for instant visual impact.</p>
+            </div>
+        </div>
+
+        <h2 class="category-title">2nd/3rd Year / Placement (With IT Experience & Cover Letter)</h2>
+        <div class="template-grid">
+            <div class="template-card" onclick="buildResume('final', 'minimal', false)">
+                <h3>Executive Minimalist</h3><div style="margin: 10px 0;"><span class="tag">Cover Letter</span><span class="tag">No Photo</span></div>
+                <p style="font-size: 0.85rem;">Straightforward, ATS-friendly design. Zero distractions.</p>
+            </div>
+            <div class="template-card" onclick="buildResume('final', 'classic', true)">
+                <h3>Corporate Standard</h3><div style="margin: 10px 0;"><span class="tag">Cover Letter</span><span class="tag">With Photo</span></div>
+                <p style="font-size: 0.85rem;">Traditional layout with headshot. Preferred by luxury heritage brands.</p>
+            </div>
+            <div class="template-card" onclick="buildResume('final', 'colored', true)">
+                <h3>Global Brand</h3><div style="margin: 10px 0;"><span class="tag">Cover Letter</span><span class="tag">With Photo</span></div>
+                <p style="font-size: 0.85rem;">Colored sidebar setup. Highly modern, perfect for MT programs.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="editorView">
+        <p style="margin-bottom: 20px; color: var(--text-muted); text-align: center;">
+            💡 <strong>Click blue brackets</strong> to edit smartly. <strong>Hover over a section</strong> to delete it.
+        </p>
+        <div id="export-container"></div>
+    </div>
+
+    <input type="file" id="imageInput" style="display: none;" accept="image/png, image/jpeg">
+
+    <script>
+        // --- SMART RESPONSIVE SCALING (MOBILE FIX) ---
+        function scaleResume() {
+            const wrappers = document.querySelectorAll('.page-wrapper');
+            const editor = document.getElementById('editorView');
+            if (wrappers.length === 0 || editor.style.display === 'none') return;
+            
+            // Calculate available width minus padding
+            const containerWidth = editor.clientWidth - 40; 
+            const targetWidth = 794; // Exact A4 width in pixels
+            
+            wrappers.forEach(wrapper => {
+                if (containerWidth < targetWidth) {
+                    const scale = containerWidth / targetWidth;
+                    wrapper.style.transform = `scale(${scale})`;
+                    wrapper.style.transformOrigin = 'top center';
+                    // Adjust margin to pull bottom content up after shrinking
+                    const h = wrapper.offsetHeight || 1122;
+                    wrapper.style.marginBottom = `-${h * (1 - scale) - 20}px`;
+                } else {
+                    wrapper.style.transform = 'none';
+                    wrapper.style.marginBottom = '20px';
+                }
+            });
+        }
+        window.addEventListener('resize', scaleResume);
+
+        window.onload = () => setTimeout(() => document.getElementById('pageLoader').classList.add('hidden'), 400);
+        function updateColor(e) { document.documentElement.style.setProperty('--theme-color', e.target.value); }
+
+        // --- IMAGE UPLOAD ---
+        let currentImg = null;
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            if (this.files[0]) {
+                const reader = new FileReader();
+                reader.onload = e => { currentImg.src = e.target.result; currentImg.style.border = 'none'; };
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+        function triggerUpload(img) { currentImg = img; document.getElementById('imageInput').click(); }
+
+        const delBtn = `<button class="delete-btn" contenteditable="false" title="Remove this section" onclick="this.parentElement.remove(); setTimeout(scaleResume, 50);">×</button>`;
+
+        // --- QUICK FILL LOGIC ---
+        function formatPhone(input) {
+            if(input.value && !input.value.startsWith('+91')) {
+                input.value = '+91 ' + input.value.replace(/^\+?91\s*/, '');
+                updateField('phone', input.value);
+            }
+        }
+        function updateField(fieldClass, value) {
+            const defaults = { 'fname': '[FIRST NAME]', 'lname': '[LAST NAME]', 'email': '[email@address.com]', 'phone': '[+91-XXXXX-XXXXX]', 'location': '[City, State]', 'linkedin': '[LinkedIn URL]' };
+            const finalVal = value.trim() !== '' ? value : defaults[fieldClass];
+            document.querySelectorAll('.fill-' + fieldClass).forEach(el => {
+                el.innerText = finalVal;
+                if(!finalVal.includes('[')) el.classList.remove('fill-error');
+            });
+        }
+
+        // --- SMART EDIT LOGIC ---
+        let currentPh = null;
+        function openEditModal(element) {
+            currentPh = element;
+            const type = element.getAttribute('data-type');
+            const oldText = element.innerText.replace(/\[|\]/g, ''); 
+            let html = '';
+
+            const years = Array.from({length: 15}, (_, i) => 2018 + i).map(y => `<option value="${y}">${y}</option>`).join('');
+            const percents = Array.from({length: 51}, (_, i) => 50 + i).map(p => `<option value="${p}%">${p}%</option>`).join('');
+            
+            const hardSkills = ["Opera PMS", "Fidelio", "Menu Engineering", "F&B Operations", "Front Desk Management", "Culinary Arts", "Bakery & Confectionery", "Housekeeping Operations", "Event Banqueting", "Graphic Design", "Canva", "MS Office"];
+            const softSkills = ["Cross-cultural Communication", "Conflict Resolution", "Time Management", "Team Leadership", "Problem Solving", "Adaptability", "Customer Service Excellence"];
+            const hobbies = ["Personal Fitness & Calisthenics", "Culinary Research", "Baking", "Traveling & Tourism", "Reading", "Photography", "E-Sports"];
+
+            function buildSelect(opts, label) {
+                let s = `<div class="input-group"><label>${label}</label><select id="phSelect" class="form-control" onchange="checkCustom(this)">`;
+                s += `<option value="" disabled selected>-- Select Option --</option>`;
+                opts.forEach(o => s += `<option value="${o}">${o}</option>`);
+                s += `<option value="custom">✍️ Type Custom...</option></select></div>`;
+                s += `<input type="text" id="phCustomInput" class="form-control" style="display:none; margin-top:10px;" placeholder="Type your custom text...">`;
+                return s;
+            }
+
+            // DUAL YEAR FIX
+            if (type === 'dual-year') {
+                html = `
+                    <div class="input-group"><label>Start Year</label><select id="phSelect1" class="form-control"><option value="" disabled selected>-- Select Start Year --</option>${years}</select></div>
+                    <div class="input-group" style="margin-top:10px;"><label>End Year</label><select id="phSelect2" class="form-control"><option value="" disabled selected>-- Select Expected End Year --</option>${years}</select></div>
+                `;
+            } else if (type === 'year') {
+                html = `<div class="input-group"><label>Select Year</label><select id="phSelect" class="form-control"><option value="" disabled selected>-- Select Year --</option>${years}</select></div>`;
+            } else if (type === 'percentage') {
+                html = `<div class="input-group"><label>Percentage / Aggregate</label>
+                        <select id="phSelect" class="form-control" onchange="checkCustom(this)">
+                            <option value="" disabled selected>-- Select --</option>${percents}<option value="custom">✍️ Enter Exact Decimal (e.g. 85.5%)</option>
+                        </select>
+                        <input type="text" id="phCustomInput" class="form-control" style="display:none; margin-top:10px;" placeholder="e.g. 85.5%"></div>`;
+            } else if (type === 'hardskill') html = buildSelect(hardSkills, "Select Hard Skill");
+            else if (type === 'softskill') html = buildSelect(softSkills, "Select Soft Skill");
+            else if (type === 'hobby') html = buildSelect(hobbies, "Select Hobby / Interest");
+            else if (type === 'textarea') html = `<div class="input-group"><label>Edit Text</label><textarea id="phInput" class="form-control" rows="5" placeholder="${oldText}"></textarea></div>`;
+            else html = `<div class="input-group"><label>Edit Text</label><input type="text" id="phInput" class="form-control" placeholder="${oldText}" value=""></div>`;
+
+            document.getElementById('smartEditBody').innerHTML = html;
+            document.getElementById('smartEditModal').classList.add('show');
+        }
+
+        function checkCustom(selectObj) {
+            const customInput = document.getElementById('phCustomInput');
+            customInput.style.display = selectObj.value === 'custom' ? 'block' : 'none';
+            if(selectObj.value === 'custom') customInput.focus();
+        }
+
+        function saveSmartEdit() {
+            if(!currentPh) return;
+            let val = '';
+            const type = currentPh.getAttribute('data-type');
+            
+            if (type === 'dual-year') {
+                const v1 = document.getElementById('phSelect1').value;
+                const v2 = document.getElementById('phSelect2').value;
+                if (v1 && v2) val = `${v1} – ${v2}`;
+            } else {
+                const select = document.getElementById('phSelect');
+                const customInput = document.getElementById('phCustomInput');
+                const input = document.getElementById('phInput');
+                
+                if (select) {
+                    val = select.value === 'custom' ? customInput.value : select.value;
+                } else if (input) {
+                    val = input.value;
+                }
+            }
+            
+            if (val.trim() !== '') {
+                // Replaces the bracket entirely with the clean text
+                currentPh.outerHTML = val; 
+            }
+            document.getElementById('smartEditModal').classList.remove('show');
+            setTimeout(scaleResume, 50); // Adjust size if text wraps
+        }
+
+        function addCustomSection() {
+            let targetContainer = document.querySelector('.layout-colored .main-col') || document.querySelector('.layout-classic') || document.querySelector('.layout-minimal');
+            if (!targetContainer) return;
+            const div = document.createElement('div');
+            div.className = 'resume-section';
+            div.innerHTML = `${delBtn}<h2 contenteditable="true">Custom Section</h2><div contenteditable="true"><ul><li><span contenteditable="false" class="ph" data-type="text" onclick="openEditModal(this)">[Add custom detail here]</span></li></ul></div>`;
+            targetContainer.appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(scaleResume, 50);
+        }
+
+        function ph(type, text) {
+            return `<span contenteditable="false" class="ph" data-type="${type}" onclick="openEditModal(this)">[${text}]</span>`;
+        }
+
+        // --- TEMPLATE GENERATOR ---
+        function buildResume(level, style, hasPhoto) {
+            document.getElementById('landingView').style.display = 'none';
+            document.getElementById('editorView').style.display = 'flex';
+            document.getElementById('editorControls').style.display = 'flex';
+            document.getElementById('colorPickerBox').style.display = style === 'colored' ? 'flex' : 'none';
+
+            let html = '';
+            
+            // 1. COVER LETTER
+            if (level === 'final') {
+                html += `
+                <div class="page-wrapper"><div class="page-content cover-letter" contenteditable="true">
+                    <div style="text-align: right; margin-bottom: 30px;">Date: ${ph('text', '15 March 2026')}</div>
+                    <div style="margin-bottom: 30px;">
+                        <strong>${ph('text', 'Hiring Manager Name / HR Dept')}</strong><br>${ph('text', 'Hotel Brand Name')}<br>${ph('text', 'Hotel Address')}<br>${ph('text', 'City, State')}
+                    </div>
+                    <div style="margin-bottom: 20px;"><strong>Subject: Application for Management Trainee / Full-Time Position</strong></div>
+                    <div style="margin-bottom: 20px;">Dear ${ph('text', 'Hiring Manager Name')},</div>
+                    <p style="margin-bottom: 15px;">I am writing to express my strong interest in the ${ph('text', 'Target Role')} position at ${ph('text', 'Hotel Brand Name')}. As a dedicated hospitality management student at the Delhi Institute of Hotel Management (DIHM), I am eager to bring my operational skills and passion for luxury guest service to your esteemed brand.</p>
+                    <p style="margin-bottom: 15px;">During my 17-week Industrial Training at ${ph('text', 'Previous Hotel Name')}, I gained comprehensive cross-departmental exposure, handling high-pressure situations, VIP guest relations, and rigorous service standards. I am confident that my practical background and formal education align perfectly with the standard of excellence at ${ph('text', 'Hotel Brand Name')}.</p>
+                    <p style="margin-bottom: 30px;">Please find my resume attached for your review. I would welcome the opportunity for an interview to discuss how my skills can contribute to your team. Thank you for your time and consideration.</p>
+                    <div>Sincerely,<br><br><strong><span class="fill-fname">[FIRST NAME]</span> <span class="fill-lname">[LAST NAME]</span></strong><br><span class="fill-phone">[+91-XXXXX-XXXXX]</span><br><span class="fill-email">[email@address.com]</span></div>
+                </div></div>
+                <div class="html2pdf__page-break"></div>`;
+            }
+
+            // 2. RESUME DATA BLOCKS
+            const imgHTML = hasPhoto ? `<div class="resume-section" style="display:inline-block;">${delBtn}<img src="https://via.placeholder.com/150?text=Upload+Photo" class="photo-box" onclick="triggerUpload(this)"></div>` : '';
+            
+            const eduBlock = `
+                <div class="resume-section">
+                    ${delBtn}
+                    <h2>Academic Qualifications</h2>
+                    <div contenteditable="true" style="margin-bottom: 15px;">
+                        <div class="row"><span>B.Sc. Hospitality & Hotel Administration</span><span style="font-weight:normal;">${ph('dual-year', 'Start Year - Expected End Year')}</span></div>
+                        <div class="sub-row"><span>DIHM, New Delhi (JNU & NCHMCT)</span><span>Aggregate: ${ph('percentage', 'Select %')}</span></div>
+                        <div class="row" style="margin-top:8px;"><span>Class XII (Senior Secondary)</span><span style="font-weight:normal;">${ph('year', 'Year')}</span></div>
+                        <div class="sub-row"><span>${ph('text', 'School Name')}, ${ph('text', 'Board Name')}</span><span>Percentage: ${ph('percentage', 'Select %')}</span></div>
+                        <div class="row" style="margin-top:8px;"><span>Class X (Secondary)</span><span style="font-weight:normal;">${ph('year', 'Year')}</span></div>
+                        <div class="sub-row"><span>${ph('text', 'School Name')}, ${ph('text', 'Board Name')}</span><span>Percentage: ${ph('percentage', 'Select %')}</span></div>
+                    </div>
+                </div>
+            `;
+
+            const skillsBlock = `
+                <div class="resume-section">
+                    ${delBtn}
+                    <h2>Core Competencies</h2>
+                    <div contenteditable="true">
+                        <ul style="margin-bottom:0;">
+                            <li style="margin-bottom:5px;"><strong>Hard Skills:</strong> ${ph('hardskill', 'Add Skill 1')}, ${ph('hardskill', 'Add Skill 2')}, ${ph('hardskill', 'Add Skill 3')}</li>
+                            <li><strong>Soft Skills:</strong> ${ph('softskill', 'Add Soft Skill 1')}, ${ph('softskill', 'Add Soft Skill 2')}, ${ph('softskill', 'Add Soft Skill 3')}</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+
+            const expBlock = level === 'it' ? `
+                <div class="resume-section">
+                    ${delBtn}
+                    <h2>Positions of Responsibility & Extracurriculars</h2>
+                    <div contenteditable="true">
+                        <ul style="margin-bottom: 15px;">
+                            <li>${ph('textarea', 'Detail your college project, event participation, or freelance work here.')}</li>
+                            <li>${ph('textarea', 'Detail another achievement here.')}</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="resume-section">
+                    ${delBtn}
+                    <h2>Hobbies & Interests</h2>
+                    <div contenteditable="true">
+                        <ul><li>${ph('hobby', 'Add Hobby 1')}</li><li>${ph('hobby', 'Add Hobby 2')}</li><li>${ph('hobby', 'Add Hobby 3')}</li></ul>
+                    </div>
+                </div>` : `
+                <div class="resume-section">
+                    ${delBtn}
+                    <h2>Industrial Training</h2>
+                    <div contenteditable="true">
+                        <div class="row"><span>17-Week Industrial Trainee</span><span style="font-weight:normal;">${ph('text', 'Month Year - Month Year')}</span></div>
+                        <div class="sub-row"><span>${ph('text', 'Hotel Brand Name, City')}</span></div>
+                        <ul>
+                            <li>${ph('textarea', 'Detail your cross-training experience and key departments.')}</li>
+                            <li>${ph('textarea', 'Detail a specific achievement, VIP handling, or award.')}</li>
+                        </ul>
+                    </div>
+                </div>`;
+
+            // 3. ASSEMBLE LAYOUTS
+            if (style === 'classic' || style === 'minimal') {
+                const layoutClass = style === 'classic' ? 'layout-classic' : 'layout-minimal';
+                html += `
+                <div class="page-wrapper"><div class="page-content ${layoutClass}">
+                    ${imgHTML}
+                    <h1 contenteditable="true"><span class="fill-fname">[FIRST NAME]</span> <span class="fill-lname">[LAST NAME]</span></h1>
+                    <div class="contact resume-section">
+                        ${delBtn}
+                        <div contenteditable="true"><span class="fill-location">[City, State]</span> | <span class="fill-phone">[+91-XXXXX-XXXXX]</span> | <span class="fill-email">[email@address.com]</span> | <span class="fill-linkedin">[LinkedIn URL]</span></div>
+                    </div>
+                    
+                    <div class="resume-section">
+                        ${delBtn}
+                        <h2>Objective</h2>
+                        <div contenteditable="true" style="margin-bottom: 15px; font-size: 10.5pt; line-height: 1.5;">${ph('textarea', 'To secure a position in a reputed hospitality organization where I can utilize my academic foundation, adaptability, and passion for guest service to contribute to operational excellence.')}</div>
+                    </div>
+                    
+                    ${eduBlock}
+                    ${expBlock}
+                    ${skillsBlock}
+                </div></div>`;
+            } else if (style === 'colored') {
+                html += `
+                <div class="page-wrapper"><div class="page-content layout-colored">
+                    <div class="sidebar">
+                        ${imgHTML}
+                        <div class="resume-section">
+                            ${delBtn}
+                            <div class="contact-item"><strong>Email</strong><span class="fill-email" contenteditable="true">[email@address.com]</span></div>
+                            <div class="contact-item"><strong>Phone</strong><span class="fill-phone" contenteditable="true">[+91-XXXXX-XXXXX]</span></div>
+                            <div class="contact-item"><strong>Location</strong><span class="fill-location" contenteditable="true">[City, State]</span></div>
+                            <div class="contact-item"><strong>LinkedIn</strong><span class="fill-linkedin" contenteditable="true">[LinkedIn URL]</span></div>
+                        </div>
+                        
+                        <div class="resume-section">
+                            ${delBtn}
+                            <h2>Languages</h2>
+                            <ul style="padding-left:15px; margin-bottom:15px;" contenteditable="true">
+                                <li>${ph('text', 'English (Fluent)')}</li><li>${ph('text', 'Hindi (Native)')}</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="resume-section">
+                            ${delBtn}
+                            <h2>Interests</h2>
+                            <ul style="padding-left:15px; margin-bottom:0;" contenteditable="true">
+                                <li>${ph('hobby', 'Add Hobby 1')}</li><li>${ph('hobby', 'Add Hobby 2')}</li><li>${ph('hobby', 'Add Hobby 3')}</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="main-col">
+                        <h1 contenteditable="true"><span class="fill-fname">[FIRST NAME]</span><br><span class="fill-lname">[LAST NAME]</span></h1>
+                        <div class="resume-section">
+                            ${delBtn}
+                            <div style="color:var(--theme-color); font-weight:600; font-size:14pt; margin-bottom:15px;" contenteditable="true">${ph('text', 'Hospitality Management Student')}</div>
+                        </div>
+                        
+                        <div class="resume-section">
+                            ${delBtn}
+                            <h2>Profile</h2>
+                            <p style="font-size:10.5pt; line-height:1.5; margin-bottom:15px;" contenteditable="true">${ph('textarea', 'Dedicated hospitality professional eager to bring exceptional guest service skills, modern digital adaptability, and a strong operational foundation to your esteemed brand.')}</p>
+                        </div>
+                        
+                        ${eduBlock}
+                        ${expBlock}
+                        ${skillsBlock}
+                    </div>
+                </div></div>`;
+            }
+            
+            document.getElementById('export-container').innerHTML = html;
+            setTimeout(scaleResume, 50); // Scale immediately after render
+            setTimeout(() => document.getElementById('quickFillModal').classList.add('show'), 600);
+        }
+
+        // --- VALIDATION & EXPORT LOGIC ---
+        function exportDoc(type) {
+            let hasError = false;
+            
+            // Check Smart Placeholders
+            const placeholders = document.querySelectorAll('.ph');
+            placeholders.forEach(el => {
+                el.classList.add('ph-error');
+                hasError = true;
+            });
+
+            // Check Quick Fill spans for remaining brackets
+            const fillSpans = document.querySelectorAll('.fill-fname, .fill-lname, .fill-email, .fill-phone, .fill-location, .fill-linkedin');
+            fillSpans.forEach(el => {
+                if (el.innerText.includes('[')) {
+                    el.classList.add('fill-error');
+                    hasError = true;
+                }
+            });
+
+            if (hasError) {
+                alert("⚠️ Oops! You have unedited brackets left in your document.\n\nPlease click the RED highlighted areas to fill them in before exporting.");
+                return;
+            }
+
+            document.querySelectorAll('[contenteditable="true"]').forEach(el => el.style.outline = 'none');
+            const container = document.getElementById('export-container');
+            container.classList.add('exporting');
+            
+            if (type === 'pdf') {
+                html2pdf().set({ margin: 0, filename: 'DIHM_Resume.pdf', image: { type: 'jpeg', quality: 1.0 }, html2canvas: { scale: 2 }, jsPDF: { format: 'a4', orientation: 'portrait' } })
+                .from(container).save()
+                .then(() => container.classList.remove('exporting'));
+            } else {
+                const wrappers = document.querySelectorAll('.page-wrapper');
+                let completed = 0;
+                wrappers.forEach((wrapper, index) => {
+                    const origScale = wrapper.style.transform;
+                    wrapper.style.transform = 'scale(1)';
+                    html2canvas(wrapper, { scale: 2 }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = `DIHM_Resume_Page_${index+1}.png`;
+                        link.href = canvas.toDataURL('image/png'); link.click();
+                        wrapper.style.transform = origScale;
+                        completed++;
+                        if (completed === wrappers.length) container.classList.remove('exporting');
+                    });
+                });
+            }
+        }
+    </script>
+</body>
+</html>
